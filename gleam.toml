@@ -1,0 +1,15 @@
+name = "rtmp"
+version = "0.1.0"
+gleam = ">= 0.32.0"
+
+description = "RTMP protocol implementation for Gleam"
+licences = ["Apache-2.0", "MIT"]
+repository = { type = "github", user = "jamesbirtles", repo = "gleam-rtmp" }
+
+[dependencies]
+gleam_stdlib = "~> 0.31"
+mug = "~> 0.1"
+gleam_crypto = "~> 0.4"
+
+[dev-dependencies]
+gleeunit = "~> 0.10"
