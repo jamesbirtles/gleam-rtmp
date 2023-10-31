@@ -6,29 +6,43 @@ pub type Error {
   NeedMoreBytes
   BadVersionID
   UnknownPacket1Format
+}
 
-  NeedToSendP0AndP1NotImplemented
+pub type PeerType {
+  Server
+  Client
 }
 
 pub opaque type Handshake {
   Handshake(
     stage: HandshakeStage,
+    peer_type: PeerType,
     buffered: BitArray,
-    response: BitArray,
-    is_server: Bool,
+    to_send: BitArray,
   )
 }
 
-pub type HandshakeStage {
-  NeedToSendP0AndP1
+pub opaque type HandshakeStage {
   WaitingForPacket0
   WaitingForPacket1
   WaitingForPacket2
   Complete
 }
 
-pub fn new() {
-  NeedToSendP0AndP1
+pub fn new(peer_type: PeerType) -> Handshake {
+  let to_send = case peer_type {
+    Server -> <<>>
+    Client -> {
+      let random_bits = crypto.strong_random_bytes(1532 - 8)
+      <<3, 0:8-unit(4), adobe_version:bits, random_bits:bits>>
+    }
+  }
+  Handshake(
+    stage: WaitingForPacket0,
+    peer_type: peer_type,
+    buffered: <<>>,
+    to_send: to_send,
+  )
 }
 
 const rtmp_packet_size = 1536
@@ -54,19 +68,11 @@ pub type HandshakeAction {
 }
 
 pub fn take_action(handshake: Handshake) -> #(Handshake, HandshakeAction) {
-  case bit_string.byte_size(handshake.response), handshake.stage {
+  case bit_string.byte_size(handshake.to_send), handshake.stage {
     0, Complete -> #(handshake, Finish(handshake.buffered))
     0, _ -> #(handshake, Read)
-    _, _ -> #(Handshake(..handshake, response: <<>>), Write(handshake.response))
+    _, _ -> #(Handshake(..handshake, to_send: <<>>), Write(handshake.to_send))
   }
-}
-
-pub fn create_outbound_p0_and_p1() -> #(Handshake, BitArray) {
-  let random_bits = crypto.strong_random_bytes(1532 - 8)
-  #(
-    Handshake(WaitingForPacket0, <<>>, <<>>, False),
-    <<3, 0:8-unit(4), adobe_version:bits, random_bits:bits>>,
-  )
 }
 
 pub fn process_bytes(
@@ -75,7 +81,6 @@ pub fn process_bytes(
 ) -> Result(Handshake, Error) {
   case handshake, bytes {
     _, <<>> -> Ok(handshake)
-    Handshake(stage: Complete, ..), _ -> Ok(handshake)
     Handshake(stage: WaitingForPacket0, ..), _ ->
       parse_0(handshake, bytes)
       |> try(fn(res) {
@@ -89,8 +94,7 @@ pub fn process_bytes(
         process_bytes(handshake, bytes)
       })
     Handshake(stage: WaitingForPacket2, ..), _ -> parse_2(handshake, bytes)
-    Handshake(stage: NeedToSendP0AndP1, ..), _ ->
-      Error(NeedToSendP0AndP1NotImplemented)
+    Handshake(stage: Complete, ..), _ -> Ok(handshake)
   }
 }
 
@@ -111,16 +115,16 @@ fn parse_1(handshake: Handshake, bytes: BitArray) {
       use digest <- try(digest_for_received_packet(
         handshake_bytes,
         case handshake {
-          Handshake(is_server: True, ..) -> fp_name
-          Handshake(is_server: False, ..) -> fms_name
+          Handshake(peer_type: Server, ..) -> fp_name
+          Handshake(peer_type: Client, ..) -> fms_name
         },
       ))
 
       let output_data =
         crypto.strong_random_bytes(rtmp_packet_size - sha256_digest_length)
       let key_prefix = case handshake {
-        Handshake(is_server: True, ..) -> fms_name
-        Handshake(is_server: False, ..) -> fp_name
+        Handshake(peer_type: Server, ..) -> fms_name
+        Handshake(peer_type: Client, ..) -> fp_name
       }
       let key = <<key_prefix:bits, random_crud:bits>>
       let hmac1 = calc_hmac(digest, key)
@@ -132,7 +136,7 @@ fn parse_1(handshake: Handshake, bytes: BitArray) {
           ..handshake,
           stage: WaitingForPacket2,
           buffered: <<>>,
-          response: <<handshake.response:bits, output_packet:bits>>,
+          to_send: <<handshake.to_send:bits, output_packet:bits>>,
         ),
         rest,
       ))
@@ -150,9 +154,7 @@ fn parse_2(handshake: Handshake, bytes: BitArray) {
       // TODO: p2 verification
       // https://docs.rs/rml_rtmp/0.8.0/src/rml_rtmp/handshake/mod.rs.html#398-410
 
-      Ok(
-        Handshake(..handshake, stage: Complete, buffered: rest, response: <<>>),
-      )
+      Ok(Handshake(..handshake, stage: Complete, buffered: rest, to_send: <<>>))
     }
     bytes -> Ok(Handshake(..handshake, buffered: bytes))
   }

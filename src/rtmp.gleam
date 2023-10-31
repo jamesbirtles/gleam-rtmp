@@ -9,13 +9,10 @@ pub fn main() {
     |> mug.timeout(milliseconds: 2000)
     |> mug.connect()
 
-  let #(handshake, p0_and_p1) = handshake.create_outbound_p0_and_p1()
+  let handshake = handshake.new(handshake.Client)
 
-  let assert Ok(Nil) = mug.send(socket, p0_and_p1)
-
-  let result = do_handshake(socket, handshake)
+  let assert Ok(_) = do_handshake(socket, handshake)
   io.println("handshake complete")
-  io.debug(result)
 }
 
 fn do_handshake(
@@ -27,7 +24,6 @@ fn do_handshake(
       // TODO: propgate error
       let assert Ok(packet) = mug.receive(socket, timeout_milliseconds: 10_000)
       use handshake <- result.try(handshake.process_bytes(handshake, packet))
-      io.debug(handshake)
       do_handshake(socket, handshake)
     }
     #(handshake, handshake.Write(bytes)) -> {
