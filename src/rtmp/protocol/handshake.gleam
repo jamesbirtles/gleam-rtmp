@@ -1,6 +1,6 @@
 import gleam/crypto
 import gleam/result.{try}
-import gleam/bit_string
+import gleam/bit_array
 
 pub type Error {
   NeedMoreBytes
@@ -68,7 +68,7 @@ pub type HandshakeAction {
 }
 
 pub fn take_action(handshake: Handshake) -> #(Handshake, HandshakeAction) {
-  case bit_string.byte_size(handshake.to_send), handshake.stage {
+  case bit_array.byte_size(handshake.to_send), handshake.stage {
     0, Complete -> #(handshake, Finish(handshake.buffered))
     0, _ -> #(handshake, Read)
     _, _ -> #(Handshake(..handshake, to_send: <<>>), Write(handshake.to_send))
