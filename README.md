@@ -1,4 +1,4 @@
-# RTMP protocl implementation for Gleam
+# [WIP ]RTMP protocol implementation for Gleam
 
 [![Package Version](https://img.shields.io/hexpm/v/rtmp)](https://hex.pm/packages/rtmp)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/rtmp/)
